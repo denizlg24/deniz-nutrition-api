@@ -1,9 +1,13 @@
-import { Elysia } from "elysia";
+import { env } from "./config/env";
+import { app } from "./app";
+import { connectRedis } from "./infra/redis";
+import { logger } from "./shared/logger";
 
-const app = new Elysia()
-  .get("/", () => "Hello Elysia")
-  .listen(process.env.API_PORT || 3000);
+await connectRedis();
 
-console.log(
-  `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`,
-);
+const server = app.listen(env.apiPort);
+
+logger.info("server.started", {
+  host: server.server?.hostname,
+  port: server.server?.port,
+});

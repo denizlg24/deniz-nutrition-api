@@ -2,14 +2,29 @@
   "name": "deniz-nutrition-api",
   "version": "1.0.50",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "bun run --watch src/index.ts"
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "dev": "bun run --watch src/index.ts",
+    "import:openfoodfacts": "bun run scripts/import-openfoodfacts.ts",
+    "import:usda": "bun run scripts/import-usda.ts",
+    "start": "bun run src/index.ts",
+    "test": "bun test",
+    "test:coverage": "bun test --coverage",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "elysia": "latest"
+    "@elysia/openapi": "^1.4.15",
+    "@sinclair/typebox": "^0.34.49",
+    "drizzle-orm": "^0.45.2",
+    "elysia": "latest",
+    "ioredis": "^5.10.1",
+    "pg": "^8.20.0"
   },
   "devDependencies": {
-    "bun-types": "latest"
+    "@types/pg": "^8.20.0",
+    "bun-types": "latest",
+    "drizzle-kit": "^0.31.10",
+    "typescript": "^6.0.3"
   },
   "module": "src/index.js"
 }

@@ -1,0 +1,14 @@
+node_modules
+coverage
+.git
+.env
+.env.*
+!.env.example
+.envoy/cache
+.envoy/latest
+.envoy/HEAD
+.envoy/refs
+*.log
+*.zip
+*.tar.gz
+*.tgz

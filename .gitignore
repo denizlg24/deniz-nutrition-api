@@ -8,6 +8,10 @@
 # testing
 /coverage
 
+# import checkpoints
+/.import-state
+data
+
 # next.js
 /.next/
 /out/
@@ -50,5 +54,4 @@ package-lock.json
 
 # Envoy - Config
 !.envoy/config.json
-
 
