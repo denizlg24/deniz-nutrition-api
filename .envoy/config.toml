@@ -1,0 +1,11 @@
+
+version = 1
+project_id = "8a913d27-8c9e-4c4d-be18-8e308af2785b"
+name = "deniz-nutrition-api"
+
+default_remote = "origin"
+
+[remotes]
+origin = "https://envoy-cli.vercel.app/api"
+
+
