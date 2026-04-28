@@ -89,7 +89,8 @@ export const barcodeParamsSchema = t.Object({
 export const searchQuerySchema = t.Object({
   q: t.String({ minLength: 1 }),
   lang: t.Optional(t.Union(supportedLanguages.map((lang) => t.Literal(lang)))),
-  limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50 })),
+  limit: t.Optional(t.Numeric({ minimum: 1 })),
+  minScore: t.Optional(t.Numeric({ minimum: 0 })),
 });
 
 export const scanItemSchema = t.Object({

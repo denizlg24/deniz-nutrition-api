@@ -201,7 +201,7 @@ Health and readiness:
 
 Items:
 
-- `GET /items/search?q={query}&lang={lang}`
+- `GET /items/search?q={query}&lang={lang}&minScore={score}&limit={limit}`
 - `GET /items/barcode/{barcode}`
 - `GET /items/{id}`
 - `GET /items/{id}/nutrition`

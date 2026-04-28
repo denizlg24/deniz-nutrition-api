@@ -60,16 +60,18 @@ class FakeItemsRepository implements ItemsRepositoryPort {
   searchArgs?: {
     query: string;
     language: SupportedLanguage;
-    limit: number;
+    limit: number | undefined;
+    minScore: number;
   };
-  searchResults: ItemSearchResult[] = [{ ...baseItem, rank: 0.75 }];
+  searchResults: ItemSearchResult[] = [{ ...baseItem, rank: 0.75, score: 1.1 }];
 
   async search(
     query: string,
     language: SupportedLanguage,
-    limit: number,
+    limit: number | undefined,
+    minScore: number,
   ): Promise<ItemSearchResult[]> {
-    this.searchArgs = { query, language, limit };
+    this.searchArgs = { query, language, limit, minScore };
     return this.searchResults;
   }
 
@@ -137,17 +139,32 @@ afterEach(() => {
 });
 
 describe("ItemsService", () => {
-  it("delegates search with default language and limit", async () => {
+  it("delegates search with default language and minimum score", async () => {
     const repository = new FakeItemsRepository();
     const service = new ItemsService(repository);
 
     await expect(service.search("yogurt")).resolves.toEqual([
-      { ...baseItem, rank: 0.75 },
+      { ...baseItem, rank: 0.75, score: 1.1 },
     ]);
     expect(repository.searchArgs).toEqual({
       query: "yogurt",
       language: "english",
-      limit: 20,
+      limit: undefined,
+      minScore: 0.1,
+    });
+  });
+
+  it("delegates search limit and minimum score overrides", async () => {
+    const repository = new FakeItemsRepository();
+    const service = new ItemsService(repository);
+
+    await service.search("yogurt", "english", 500, 0.25);
+
+    expect(repository.searchArgs).toEqual({
+      query: "yogurt",
+      language: "english",
+      limit: 500,
+      minScore: 0.25,
     });
   });
 

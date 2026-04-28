@@ -28,7 +28,12 @@ export const itemsRoutes = new Elysia({ prefix: "/items" })
     "/search",
     async ({ query, request }) =>
       ok(
-        await service.search(query.q, query.lang ?? "english", query.limit),
+        await service.search(
+          query.q,
+          query.lang ?? "english",
+          query.limit,
+          query.minScore,
+        ),
         getRequestId(request),
       ),
     {

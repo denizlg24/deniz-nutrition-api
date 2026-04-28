@@ -29,6 +29,7 @@ export type ItemSummary = Pick<
 
 export interface ItemSearchResult extends ItemSummary {
   rank: number;
+  score: number;
 }
 
 export type ItemSummaryInput = Pick<
@@ -80,21 +81,44 @@ export class ItemsRepository {
   async search(
     query: string,
     language: SupportedLanguage,
-    limit: number,
+    limit: number | undefined,
+    minScore: number,
   ): Promise<ItemSearchResult[]> {
     const searchVector = buildSearchVector(language);
     const tsQuery = sql`websearch_to_tsquery(${language}::regconfig, ${query})`;
     const rank = sql<number>`ts_rank_cd(${searchVector}, ${tsQuery})`;
+    const normalizedQuery = query.trim().toLowerCase();
+    const score = sql<number>`(
+      ${rank}
+      + case
+        when lower(${items.name}) = ${normalizedQuery} then 3
+        when lower(${items.name}) like '%' || ${normalizedQuery} || '%' then 1.5
+        else 0
+      end
+      + case
+        when ${items.brand} is null or btrim(${items.brand}) = '' then 0.35
+        when lower(${items.brand}) = ${normalizedQuery} then 0.25
+        when lower(${items.brand}) like '%' || ${normalizedQuery} || '%' then 0.1
+        else 0
+      end
+    )`;
 
-    return this.database
+    const search = this.database
       .select({
         ...itemSummarySelect,
         rank,
+        score,
       })
       .from(items)
-      .where(sql`${searchVector} @@ ${tsQuery}`)
-      .orderBy(sql`${rank} desc`, asc(items.name))
-      .limit(limit);
+      .where(sql`${searchVector} @@ ${tsQuery} and ${score} >= ${minScore}`)
+      .orderBy(sql`${score} desc`, sql`${rank} desc`, asc(items.name))
+      .$dynamic();
+
+    if (limit !== undefined) {
+      return search.limit(limit);
+    }
+
+    return search;
   }
 
   async findById(id: string): Promise<ItemSummary | undefined> {

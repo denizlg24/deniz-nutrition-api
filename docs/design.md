@@ -150,7 +150,7 @@ A `tsvector` full-text search index is built on the concatenation of `name` and 
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/items/search?q={query}&lang={lang}` | Full-text search for items by name/brand |
+| `GET` | `/items/search?q={query}&lang={lang}&minScore={score}&limit={limit}` | Full-text search for items by name/brand |
 | `GET` | `/items/barcode/{barcode}` | Look up an item by barcode |
 | `GET` | `/items/{id}` | Get item summary by ID |
 | `GET` | `/items/{id}/nutrition` | Get full nutrition data for an item |

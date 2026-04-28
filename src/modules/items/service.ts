@@ -16,7 +16,7 @@ import type {
 import { createItemSchema } from "./schemas";
 import type { ItemSearchResult, ItemSummary, ItemSummaryInput } from "./repository";
 
-const DEFAULT_SEARCH_LIMIT = 20;
+const DEFAULT_MIN_SEARCH_SCORE = 0.1;
 
 const nutrientKeys = [
   "calories",
@@ -133,9 +133,10 @@ export class ItemsService {
   async search(
     query: string,
     language: SupportedLanguage = "english",
-    limit = DEFAULT_SEARCH_LIMIT,
+    limit?: number,
+    minScore = DEFAULT_MIN_SEARCH_SCORE,
   ) {
-    return this.repository.search(query, language, limit);
+    return this.repository.search(query, language, limit, minScore);
   }
 
   async getById(id: string) {
@@ -220,7 +221,8 @@ export interface ItemsRepositoryPort {
   search(
     query: string,
     language: SupportedLanguage,
-    limit: number,
+    limit: number | undefined,
+    minScore: number,
   ): Promise<ItemSearchResult[]>;
   findById(id: string): Promise<ItemSummary | undefined>;
   findByBarcode(barcode: string): Promise<ItemSummary | undefined>;
