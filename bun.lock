@@ -8,7 +8,7 @@
         "@elysia/openapi": "^1.4.15",
         "@sinclair/typebox": "^0.34.49",
         "drizzle-orm": "^0.45.2",
-        "elysia": "latest",
+        "elysia": "^1.4.28",
         "ioredis": "^5.10.1",
         "pg": "^8.20.0",
       },
