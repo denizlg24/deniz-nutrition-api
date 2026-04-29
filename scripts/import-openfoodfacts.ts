@@ -33,6 +33,24 @@ interface ImportableFood {
   nutrition: Omit<NewNutritionData, "itemId">;
 }
 
+interface OFFNutriments {
+  [key: string]: number | string | undefined;
+}
+
+interface OFFProduct {
+  code?: string;
+  _id?: string;
+  product_name?: string;
+  product_name_en?: string;
+  generic_name?: string;
+  brands?: string;
+  brand_owner?: string;
+  serving_quantity?: number | string;
+  serving_quantity_unit?: string;
+  serving_size?: string;
+  nutriments?: OFFNutriments;
+}
+
 type NutritionValueField = keyof typeof defaultNutritionValues;
 const MAX_NUMERIC_12_3_EXCLUSIVE = 1_000_000_000;
 
@@ -123,6 +141,7 @@ const nutrientColumns = {
   "vitamin-d_100g": { field: "d", multiplier: 1_000_000 },
   "vitamin-e_100g": { field: "e", multiplier: 1_000 },
   "vitamin-k_100g": { field: "k", multiplier: 1_000_000 },
+  "phylloquinone_100g": { field: "k", multiplier: 1_000_000 },
   "vitamin-c_100g": { field: "c", multiplier: 1_000 },
   "vitamin-b1_100g": { field: "b1", multiplier: 1_000 },
   "vitamin-b2_100g": { field: "b2", multiplier: 1_000 },
@@ -149,6 +168,25 @@ const nutrientColumns = {
   { field: NutritionValueField; multiplier: number }
 >;
 
+const MACRO_KEYS = ["fat_100g", "carbohydrates_100g", "proteins_100g"] as const;
+const ENERGY_KEYS = ["energy-kcal_100g", "energy-kj_100g"] as const;
+const MICRO_KEYS = [
+  "vitamin-a_100g", "vitamin-d_100g", "vitamin-e_100g", "vitamin-k_100g",
+  "phylloquinone_100g", "vitamin-c_100g", "vitamin-b1_100g", "vitamin-b2_100g",
+  "vitamin-pp_100g", "vitamin-b6_100g", "vitamin-b9_100g", "vitamin-b12_100g",
+  "folates_100g", "pantothenic-acid_100g", "calcium_100g", "phosphorus_100g",
+  "iron_100g", "magnesium_100g", "zinc_100g", "copper_100g", "manganese_100g",
+  "selenium_100g", "iodine_100g", "fluoride_100g", "choline_100g",
+] as const;
+
+const hasRichNutrientData = (nutriments: OFFNutriments): boolean => {
+  const hasMacros =
+    MACRO_KEYS.every((k) => k in nutriments) &&
+    ENERGY_KEYS.some((k) => k in nutriments);
+  const hasMicro = MICRO_KEYS.some((k) => k in nutriments);
+  return hasMacros && hasMicro;
+};
+
 const parseArgs = (): ImportArgs => {
   const args = Bun.argv.slice(2);
   const getValue = (name: string) => {
@@ -163,7 +201,7 @@ const parseArgs = (): ImportArgs => {
   };
 
   return {
-    file: getValue("--file") ?? "data/en.openfoodfacts.org.products.csv.gz",
+    file: getValue("--file") ?? "data/openfoodfacts-products.jsonl",
     start: readPositiveInteger(getValue("--start"), 0),
     limit: readOptionalPositiveInteger(getValue("--limit")),
     batchSize: readPositiveInteger(getValue("--batch-size"), 500),
@@ -205,32 +243,19 @@ const writeCheckpoint = async (
   await writeFile(path, JSON.stringify(checkpoint, null, 2));
 };
 
-const parseTsvLine = (line: string) => line.split("\t");
-
-const rowValue = (
-  row: string[],
-  indexByColumn: Map<string, number>,
-  column: string,
-) => {
-  const index = indexByColumn.get(column);
-  if (index === undefined) return undefined;
-  const value = row[index]?.trim();
-  return value ? value : undefined;
-};
-
-const parseNumber = (value: string | undefined) => {
-  if (!value) return undefined;
-  const normalized = value.replace(",", ".");
-  const parsed = Number(normalized);
+const parseNumber = (value: unknown): number | undefined => {
+  if (value === undefined || value === null || value === "") return undefined;
+  const parsed = typeof value === "number" ? value : Number(String(value).replace(",", "."));
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
-const parseServing = (row: string[], indexByColumn: Map<string, number>) => {
-  const servingQuantity = parseNumber(rowValue(row, indexByColumn, "serving_quantity"));
-  const servingSize = rowValue(row, indexByColumn, "serving_size");
+const parseServing = (product: OFFProduct) => {
+  const servingQuantity = parseNumber(product.serving_quantity);
+  const servingSize = product.serving_size?.trim() || undefined;
 
   if (servingQuantity !== undefined) {
-    const unit = servingSize?.replace(String(servingQuantity), "").trim() || "g";
+    const rawUnit = product.serving_quantity_unit?.trim();
+    const unit = rawUnit || servingSize?.replace(String(servingQuantity), "").trim() || "g";
 
     return {
       quantity: servingQuantity,
@@ -246,23 +271,25 @@ const parseServing = (row: string[], indexByColumn: Map<string, number>) => {
   };
 };
 
-const mapRow = (
-  row: string[],
-  indexByColumn: Map<string, number>,
-): ImportableFood | undefined => {
-  const barcode = rowValue(row, indexByColumn, "code");
+const mapProduct = (product: OFFProduct): ImportableFood | undefined => {
+  const barcode = product.code?.trim() || product._id?.trim();
   const name =
-    rowValue(row, indexByColumn, "product_name") ??
-    rowValue(row, indexByColumn, "generic_name");
+    product.product_name?.trim() ||
+    product.product_name_en?.trim() ||
+    product.generic_name?.trim();
 
   if (!barcode || !name) return undefined;
 
-  const serving = parseServing(row, indexByColumn);
+  const nutriments = product.nutriments;
+  if (!nutriments || !hasRichNutrientData(nutriments)) return undefined;
+
+  const serving = parseServing(product);
   const servingScale =
     serving.unit.toLowerCase().startsWith("g") ||
     serving.unit.toLowerCase().startsWith("ml")
       ? serving.quantity / 100
       : 1;
+
   const nutrition: Omit<NewNutritionData, "itemId"> = {
     ...defaultNutritionValues,
     servingLabel: serving.label,
@@ -270,9 +297,11 @@ const mapRow = (
     servingUnit: serving.unit,
   };
 
-  for (const [column, config] of Object.entries(nutrientColumns)) {
-    const value = parseNumber(rowValue(row, indexByColumn, column));
+  for (const [key, config] of Object.entries(nutrientColumns)) {
+    const value = parseNumber(nutriments[key]);
     if (value === undefined) continue;
+    // Don't overwrite a field that was already set by a higher-priority key
+    if (nutrition[config.field] !== 0) continue;
 
     nutrition[config.field] = normalizeDbAmount(
       value * config.multiplier * servingScale,
@@ -280,7 +309,7 @@ const mapRow = (
   }
 
   if (nutrition.calories === 0) {
-    const energyKj = parseNumber(rowValue(row, indexByColumn, "energy-kj_100g"));
+    const energyKj = parseNumber(nutriments["energy-kj_100g"]);
     if (energyKj !== undefined) {
       nutrition.calories = normalizeDbAmount((energyKj / 4.184) * servingScale);
     }
@@ -291,8 +320,8 @@ const mapRow = (
       barcode,
       name,
       brand:
-        rowValue(row, indexByColumn, "brands") ??
-        rowValue(row, indexByColumn, "brand_owner") ??
+        product.brands?.trim() ||
+        product.brand_owner?.trim() ||
         null,
       servingLabel: nutrition.servingLabel,
       caloriesPerServing: nutrition.calories,
@@ -331,26 +360,26 @@ const importBatch = async (
   for (const entry of batch) {
     try {
       await database.transaction(async (transaction) => {
-      const [item] = await transaction
-        .insert(items)
-        .values(entry.item)
-        .onConflictDoNothing({ target: items.barcode })
-        .returning({ id: items.id });
+        const [item] = await transaction
+          .insert(items)
+          .values(entry.item)
+          .onConflictDoNothing({ target: items.barcode })
+          .returning({ id: items.id });
 
-      if (!item) {
-        duplicates += 1;
-        return;
-      }
+        if (!item) {
+          duplicates += 1;
+          return;
+        }
 
-      await transaction
-        .insert(nutritionData)
-        .values({
-          ...entry.nutrition,
-          itemId: item.id,
-        })
-        .onConflictDoNothing({ target: nutritionData.itemId });
+        await transaction
+          .insert(nutritionData)
+          .values({
+            ...entry.nutrition,
+            itemId: item.id,
+          })
+          .onConflictDoNothing({ target: nutritionData.itemId });
 
-      inserted += 1;
+        inserted += 1;
       });
     } catch (error) {
       failed += 1;
@@ -380,10 +409,14 @@ const main = async () => {
     max: 5,
   });
   const database = drizzle(pool);
-  const stream = createReadStream(args.file).pipe(createGunzip());
-  const lines = createInterface({ input: stream, crlfDelay: Infinity });
+
+  const fileStream = createReadStream(args.file);
+  const input = args.file.endsWith(".gz")
+    ? fileStream.pipe(createGunzip())
+    : fileStream;
+  const lines = createInterface({ input, crlfDelay: Infinity });
+
   const batch: ImportableFood[] = [];
-  let indexByColumn: Map<string, number> | undefined;
   let index = 0;
   let processed = 0;
   let imported = 0;
@@ -397,12 +430,7 @@ const main = async () => {
 
   try {
     for await (const line of lines) {
-      const row = parseTsvLine(line);
-
-      if (!indexByColumn) {
-        indexByColumn = new Map(row.map((column, columnIndex) => [column, columnIndex]));
-        continue;
-      }
+      if (!line.trim()) continue;
 
       if (index < start) {
         index += 1;
@@ -416,7 +444,15 @@ const main = async () => {
       processed += 1;
       index += 1;
 
-      const mapped = mapRow(row, indexByColumn);
+      let product: OFFProduct;
+      try {
+        product = JSON.parse(line) as OFFProduct;
+      } catch {
+        skipped += 1;
+        continue;
+      }
+
+      const mapped = mapProduct(product);
 
       if (!mapped) {
         skipped += 1;
