@@ -150,6 +150,9 @@ const labelNutrientField = {
 
 type NutritionValueField = keyof typeof defaultNutritionValues;
 const MAX_NUMERIC_12_3_EXCLUSIVE = 1_000_000_000;
+const KJ_PER_KCAL = 4.184;
+const energyKcalNutrientIds = new Set([1008, 2047, 2048]);
+const energyKjNutrientIds = new Set([1062]);
 
 const getNutrientField = (id: number): NutritionValueField | undefined =>
   Object.prototype.hasOwnProperty.call(nutrientFieldById, id)
@@ -299,6 +302,8 @@ const finiteNumber = (value: unknown) =>
 
 const nutrientAmountById = (food: UsdaFood, servingScale: number) => {
   const mapped: Partial<Record<NutritionValueField, number>> = {};
+  let energyKcal: number | undefined;
+  let energyKj: number | undefined;
 
   for (const foodNutrient of food.foodNutrients ?? []) {
     const nutrientId = foodNutrient.nutrient?.id;
@@ -306,10 +311,26 @@ const nutrientAmountById = (food: UsdaFood, servingScale: number) => {
 
     if (!nutrientId || amount === undefined) continue;
 
+    if (energyKcalNutrientIds.has(nutrientId)) {
+      energyKcal = amount;
+      continue;
+    }
+
+    if (energyKjNutrientIds.has(nutrientId)) {
+      energyKj = amount;
+      continue;
+    }
+
     const field = getNutrientField(nutrientId);
     if (!field) continue;
 
     mapped[field] = normalizeDbAmount(amount * servingScale);
+  }
+
+  if (energyKcal !== undefined) {
+    mapped.calories = normalizeDbAmount(energyKcal * servingScale);
+  } else if (energyKj !== undefined) {
+    mapped.calories = normalizeDbAmount((energyKj / KJ_PER_KCAL) * servingScale);
   }
 
   mapped.omega3 = normalizeDbAmount(
