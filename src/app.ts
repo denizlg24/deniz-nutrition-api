@@ -67,8 +67,8 @@ const getErrorResponse = (error: unknown, code?: unknown) => {
 export const app = new Elysia()
     .use(
       openapi({
-        path: "/openapi",
-        specPath: "/openapi/json",
+        path: "/docs",
+        specPath: "/docs/json",
         references: fromTypes("src/app.ts", {
           instanceName: "app",
           tsconfigPath: "tsconfig.json",
@@ -76,10 +76,10 @@ export const app = new Elysia()
         }),
         documentation: {
           info: {
-            title: "Deniz Nutrition API",
+            title: "Deniz's Nutrition API",
             version: "1.0.50",
             description:
-              "Type-safe API for nutrition item search, barcode lookup, contribution, and detailed nutrition data.",
+              "Food item search, barcode lookup, contribution, and detailed nutrition data.",
           },
           tags: [
             {
