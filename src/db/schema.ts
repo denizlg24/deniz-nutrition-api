@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { customType } from "drizzle-orm/pg-core";
 
 export const supportedLanguages = [
@@ -47,24 +48,28 @@ export const items = pgTable(
     fatPerServing: requiredAmount("fat_per_serving").default(0),
     searchVectorEnglish: tsvector("search_vector_english")
       .notNull()
-      .generatedAlwaysAs(
-        "to_tsvector('english', coalesce(name, '') || ' ' || coalesce(brand, ''))",
-      ),
+      .default(sql`''::tsvector`),
     searchVectorPortuguese: tsvector("search_vector_portuguese")
       .notNull()
-      .generatedAlwaysAs(
-        "to_tsvector('portuguese', coalesce(name, '') || ' ' || coalesce(brand, ''))",
-      ),
+      .default(sql`''::tsvector`),
     searchVectorSpanish: tsvector("search_vector_spanish")
       .notNull()
-      .generatedAlwaysAs(
-        "to_tsvector('spanish', coalesce(name, '') || ' ' || coalesce(brand, ''))",
-      ),
+      .default(sql`''::tsvector`),
     searchVectorFrench: tsvector("search_vector_french")
       .notNull()
-      .generatedAlwaysAs(
-        "to_tsvector('french', coalesce(name, '') || ' ' || coalesce(brand, ''))",
-      ),
+      .default(sql`''::tsvector`),
+    brandSearchVectorEnglish: tsvector("brand_search_vector_english")
+      .notNull()
+      .default(sql`''::tsvector`),
+    brandSearchVectorPortuguese: tsvector("brand_search_vector_portuguese")
+      .notNull()
+      .default(sql`''::tsvector`),
+    brandSearchVectorSpanish: tsvector("brand_search_vector_spanish")
+      .notNull()
+      .default(sql`''::tsvector`),
+    brandSearchVectorFrench: tsvector("brand_search_vector_french")
+      .notNull()
+      .default(sql`''::tsvector`),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -89,6 +94,22 @@ export const items = pgTable(
     index("items_search_vector_french_idx").using(
       "gin",
       table.searchVectorFrench,
+    ),
+    index("items_brand_search_vector_english_idx").using(
+      "gin",
+      table.brandSearchVectorEnglish,
+    ),
+    index("items_brand_search_vector_portuguese_idx").using(
+      "gin",
+      table.brandSearchVectorPortuguese,
+    ),
+    index("items_brand_search_vector_spanish_idx").using(
+      "gin",
+      table.brandSearchVectorSpanish,
+    ),
+    index("items_brand_search_vector_french_idx").using(
+      "gin",
+      table.brandSearchVectorFrench,
     ),
   ],
 );

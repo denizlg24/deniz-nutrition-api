@@ -14,7 +14,12 @@ import type {
   UpdateItemInput,
 } from "./schemas";
 import { createItemSchema } from "./schemas";
-import type { ItemSearchResult, ItemSummary, ItemSummaryInput } from "./repository";
+import type {
+  ItemSearchInput,
+  ItemSearchResult,
+  ItemSummary,
+  ItemSummaryInput,
+} from "./repository";
 
 const DEFAULT_MIN_SEARCH_SCORE = 0.1;
 
@@ -131,12 +136,16 @@ export class ItemsService {
   constructor(private readonly repository: ItemsRepositoryPort) {}
 
   async search(
-    query: string,
+    input: ItemSearchInput,
     language: SupportedLanguage = "english",
     limit?: number,
     minScore = DEFAULT_MIN_SEARCH_SCORE,
   ) {
-    return this.repository.search(query, language, limit, minScore);
+    if (!input.query?.trim() && !input.brand?.trim()) {
+      throw new ApiError(400, "SEARCH_QUERY_REQUIRED", "Provide q or brand");
+    }
+
+    return this.repository.search(input, language, limit, minScore);
   }
 
   async getById(id: string) {
@@ -219,7 +228,7 @@ export class ItemsService {
 
 export interface ItemsRepositoryPort {
   search(
-    query: string,
+    input: ItemSearchInput,
     language: SupportedLanguage,
     limit: number | undefined,
     minScore: number,

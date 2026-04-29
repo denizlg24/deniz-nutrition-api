@@ -8,6 +8,7 @@ import type {
 } from "../../db/schema";
 import { ApiError } from "../../shared/errors";
 import type {
+  ItemSearchInput,
   ItemSearchResult,
   ItemSummary,
   ItemSummaryInput,
@@ -58,7 +59,7 @@ class FakeItemsRepository implements ItemsRepositoryPort {
   upsertedNutrition?: Omit<NewNutritionData, "itemId">;
   upsertedSummary?: ItemSummaryInput;
   searchArgs?: {
-    query: string;
+    input: ItemSearchInput;
     language: SupportedLanguage;
     limit: number | undefined;
     minScore: number;
@@ -66,12 +67,12 @@ class FakeItemsRepository implements ItemsRepositoryPort {
   searchResults: ItemSearchResult[] = [{ ...baseItem, rank: 0.75, score: 1.1 }];
 
   async search(
-    query: string,
+    input: ItemSearchInput,
     language: SupportedLanguage,
     limit: number | undefined,
     minScore: number,
   ): Promise<ItemSearchResult[]> {
-    this.searchArgs = { query, language, limit, minScore };
+    this.searchArgs = { input, language, limit, minScore };
     return this.searchResults;
   }
 
@@ -143,11 +144,11 @@ describe("ItemsService", () => {
     const repository = new FakeItemsRepository();
     const service = new ItemsService(repository);
 
-    await expect(service.search("yogurt")).resolves.toEqual([
+    await expect(service.search({ query: "yogurt" })).resolves.toEqual([
       { ...baseItem, rank: 0.75, score: 1.1 },
     ]);
     expect(repository.searchArgs).toEqual({
-      query: "yogurt",
+      input: { query: "yogurt" },
       language: "english",
       limit: undefined,
       minScore: 0.1,
@@ -158,14 +159,44 @@ describe("ItemsService", () => {
     const repository = new FakeItemsRepository();
     const service = new ItemsService(repository);
 
-    await service.search("yogurt", "english", 500, 0.25);
+    await service.search(
+      { query: "yogurt", brand: "Deniz" },
+      "english",
+      500,
+      0.25,
+    );
 
     expect(repository.searchArgs).toEqual({
-      query: "yogurt",
+      input: { query: "yogurt", brand: "Deniz" },
       language: "english",
       limit: 500,
       minScore: 0.25,
     });
+  });
+
+  it("delegates brand-only searches", async () => {
+    const repository = new FakeItemsRepository();
+    const service = new ItemsService(repository);
+
+    await service.search({ brand: "Deniz" });
+
+    expect(repository.searchArgs).toEqual({
+      input: { brand: "Deniz" },
+      language: "english",
+      limit: undefined,
+      minScore: 0.1,
+    });
+  });
+
+  it("rejects search without name or brand text", async () => {
+    const repository = new FakeItemsRepository();
+    const service = new ItemsService(repository);
+
+    await expect(service.search({})).rejects.toMatchObject({
+      code: "SEARCH_QUERY_REQUIRED",
+      statusCode: 400,
+    });
+    expect(repository.searchArgs).toBeUndefined();
   });
 
   it("looks up items by barcode", async () => {

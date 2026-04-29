@@ -29,7 +29,10 @@ export const itemsRoutes = new Elysia({ prefix: "/items" })
     async ({ query, request }) =>
       ok(
         await service.search(
-          query.q,
+          {
+            query: query.q,
+            brand: query.brand,
+          },
           query.lang ?? "english",
           query.limit,
           query.minScore,
@@ -41,7 +44,7 @@ export const itemsRoutes = new Elysia({ prefix: "/items" })
       detail: {
         summary: "Search items",
         description:
-          "Full-text search by item name and brand. The requested language is prioritized in ranking.",
+          "Full-text search by item name, brand, or both. The requested language is prioritized in ranking.",
         tags: ["Items"],
       },
     },

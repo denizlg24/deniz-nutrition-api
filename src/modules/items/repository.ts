@@ -1,4 +1,4 @@
-import { asc, eq, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, sql, type SQL } from "drizzle-orm";
 
 import type { Database } from "../../db/client";
 import {
@@ -55,23 +55,38 @@ const itemSummarySelect = {
   updatedAt: items.updatedAt,
 };
 
-const searchVectorColumns: Record<SupportedLanguage, SQL> = {
+export interface ItemSearchInput {
+  query?: string;
+  brand?: string;
+}
+
+const nameSearchVectorColumns: Record<SupportedLanguage, SQL> = {
   english: sql`${items.searchVectorEnglish}`,
   portuguese: sql`${items.searchVectorPortuguese}`,
   spanish: sql`${items.searchVectorSpanish}`,
   french: sql`${items.searchVectorFrench}`,
 };
 
-const buildSearchVector = (priorityLanguage: SupportedLanguage) => {
+const brandSearchVectorColumns: Record<SupportedLanguage, SQL> = {
+  english: sql`${items.brandSearchVectorEnglish}`,
+  portuguese: sql`${items.brandSearchVectorPortuguese}`,
+  spanish: sql`${items.brandSearchVectorSpanish}`,
+  french: sql`${items.brandSearchVectorFrench}`,
+};
+
+const buildSearchVector = (
+  columns: Record<SupportedLanguage, SQL>,
+  priorityLanguage: SupportedLanguage,
+) => {
   const secondaryLanguages = supportedLanguages.filter(
     (language) => language !== priorityLanguage,
   );
 
   return sql`
-    setweight(${searchVectorColumns[priorityLanguage]}, 'A') ||
-    setweight(${searchVectorColumns[secondaryLanguages[0]]}, 'B') ||
-    setweight(${searchVectorColumns[secondaryLanguages[1]]}, 'B') ||
-    setweight(${searchVectorColumns[secondaryLanguages[2]]}, 'B')
+    setweight(${columns[priorityLanguage]}, 'A') ||
+    setweight(${columns[secondaryLanguages[0]]}, 'B') ||
+    setweight(${columns[secondaryLanguages[1]]}, 'B') ||
+    setweight(${columns[secondaryLanguages[2]]}, 'B')
   `;
 };
 
@@ -79,29 +94,57 @@ export class ItemsRepository {
   constructor(private readonly database: Database) {}
 
   async search(
-    query: string,
+    input: ItemSearchInput,
     language: SupportedLanguage,
     limit: number | undefined,
     minScore: number,
   ): Promise<ItemSearchResult[]> {
-    const searchVector = buildSearchVector(language);
-    const tsQuery = sql`websearch_to_tsquery(${language}::regconfig, ${query})`;
-    const rank = sql<number>`ts_rank_cd(${searchVector}, ${tsQuery})`;
-    const normalizedQuery = query.trim().toLowerCase();
+    const query = input.query?.trim();
+    const brand = input.brand?.trim();
+    const nameSearchVector = buildSearchVector(nameSearchVectorColumns, language);
+    const brandSearchVector = buildSearchVector(
+      brandSearchVectorColumns,
+      language,
+    );
+    const nameTsQuery = query
+      ? sql`websearch_to_tsquery(${language}::regconfig, ${query})`
+      : undefined;
+    const brandTsQuery = brand
+      ? sql`websearch_to_tsquery(${language}::regconfig, ${brand})`
+      : undefined;
+    const nameRank = nameTsQuery
+      ? sql<number>`ts_rank_cd(${nameSearchVector}, ${nameTsQuery})`
+      : sql<number>`0`;
+    const brandRank = brandTsQuery
+      ? sql<number>`ts_rank_cd(${brandSearchVector}, ${brandTsQuery})`
+      : sql<number>`0`;
+    const rank = sql<number>`(${nameRank} + ${brandRank})`;
+    const normalizedQuery = query?.toLowerCase();
+    const normalizedBrand = brand?.toLowerCase();
+    const nameScore = normalizedQuery
+      ? sql<number>`case
+          when lower(${items.name}) = ${normalizedQuery} then 3
+          when lower(${items.name}) like '%' || ${normalizedQuery} || '%' then 1.5
+          else 0
+        end`
+      : sql<number>`0`;
+    const brandScore = normalizedBrand
+      ? sql<number>`case
+          when lower(${items.brand}) = ${normalizedBrand} then 2
+          when lower(${items.brand}) like '%' || ${normalizedBrand} || '%' then 1
+          else 0
+        end`
+      : sql<number>`0`;
     const score = sql<number>`(
       ${rank}
-      + case
-        when lower(${items.name}) = ${normalizedQuery} then 3
-        when lower(${items.name}) like '%' || ${normalizedQuery} || '%' then 1.5
-        else 0
-      end
-      + case
-        when ${items.brand} is null or btrim(${items.brand}) = '' then 0.35
-        when lower(${items.brand}) = ${normalizedQuery} then 0.25
-        when lower(${items.brand}) like '%' || ${normalizedQuery} || '%' then 0.1
-        else 0
-      end
+      + ${nameScore}
+      + ${brandScore}
     )`;
+    const conditions = [
+      ...(nameTsQuery ? [sql`${nameSearchVector} @@ ${nameTsQuery}`] : []),
+      ...(brandTsQuery ? [sql`${brandSearchVector} @@ ${brandTsQuery}`] : []),
+      sql`${score} >= ${minScore}`,
+    ];
 
     const search = this.database
       .select({
@@ -110,7 +153,7 @@ export class ItemsRepository {
         score,
       })
       .from(items)
-      .where(sql`${searchVector} @@ ${tsQuery} and ${score} >= ${minScore}`)
+      .where(and(...conditions))
       .orderBy(sql`${score} desc`, sql`${rank} desc`, asc(items.name))
       .$dynamic();
 

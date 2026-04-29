@@ -133,11 +133,13 @@ The full, detailed nutrition breakdown linked to an item.
 
 ### Indexes
 
-A `tsvector` full-text search index is built on the concatenation of `name` and `brand` for each supported language:
+Separate `tsvector` full-text search indexes are built on `name` and `brand` for each supported language. Search vectors are stored columns maintained by write triggers; deletes remove the row and its index entries normally.
 
 **Supported languages:** `english`, `portuguese`, `spanish`, `french`
 
 **Query behavior:**
+- The caller provides `q`, `brand`, or both.
+- `q` searches item names, while `brand` searches brands.
 - The caller provides an optional `lang` parameter.
 - If provided, that language's `tsvector` is prioritized (highest weight), then concatenated with the remaining languages.
 - If no language is provided, `english` is used as the highest priority.
@@ -150,7 +152,7 @@ A `tsvector` full-text search index is built on the concatenation of `name` and 
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/items/search?q={query}&lang={lang}&minScore={score}&limit={limit}` | Full-text search for items by name/brand |
+| `GET` | `/items/search?q={query}&brand={brand}&lang={lang}&minScore={score}&limit={limit}` | Full-text search for items by name, brand, or both |
 | `GET` | `/items/barcode/{barcode}` | Look up an item by barcode |
 | `GET` | `/items/{id}` | Get item summary by ID |
 | `GET` | `/items/{id}/nutrition` | Get full nutrition data for an item |

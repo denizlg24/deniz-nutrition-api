@@ -7,6 +7,7 @@ import { redis } from "./infra/redis";
 import { env } from "./config/env";
 import { RedisRateLimiter, getClientIdentifier } from "./middleware/rate-limit";
 import { itemsRoutes } from "./modules/items/routes";
+import { serveFrontend } from "./frontend/static";
 import { ApiError, isApiError, toError } from "./shared/errors";
 import { fail, ok } from "./shared/http";
 import { logger } from "./shared/logger";
@@ -19,7 +20,17 @@ const rateLimiter = new RedisRateLimiter(redis, {
 
 const shouldSkipRateLimit = (request: Request) => {
   const { pathname } = new URL(request.url);
-  return pathname === "/health" || pathname === "/ready";
+
+  if (
+    pathname === "/health" ||
+    pathname === "/ready" ||
+    pathname === "/api/health" ||
+    pathname === "/api/ready"
+  ) {
+    return true;
+  }
+
+  return !pathname.startsWith("/api/") && !pathname.startsWith("/items/");
 };
 
 const getErrorResponse = (error: unknown, code?: unknown) => {
@@ -129,7 +140,7 @@ export const app = new Elysia()
         );
       }
     })
-    .get("/", ({ request }) =>
+    .get("/api", ({ request }) =>
       ok(
         {
           name: "deniz-nutrition-api",
@@ -139,6 +150,21 @@ export const app = new Elysia()
       {
         detail: {
           summary: "Service metadata",
+          tags: ["System"],
+        },
+      },
+    )
+    .get("/api/health", ({ request }) =>
+      ok(
+        {
+          status: "ok",
+          uptimeSeconds: process.uptime(),
+        },
+        getRequestContext(request)?.requestId ?? "unknown",
+      ),
+      {
+        detail: {
+          summary: "Health check",
           tags: ["System"],
         },
       },
@@ -158,6 +184,23 @@ export const app = new Elysia()
         },
       },
     )
+    .get("/api/ready", async ({ request }) => {
+      await db.execute(sql`select 1`);
+      await redis.ping();
+
+      return ok(
+        {
+          status: "ready",
+        },
+          getRequestContext(request)?.requestId ?? "unknown",
+        );
+    }, {
+      detail: {
+        summary: "Readiness check",
+        description: "Checks PostgreSQL and Redis connectivity.",
+        tags: ["System"],
+      },
+    })
     .get("/ready", async ({ request }) => {
       await db.execute(sql`select 1`);
       await redis.ping();
@@ -175,7 +218,9 @@ export const app = new Elysia()
         tags: ["System"],
       },
     })
+    .group("/api", (api) => api.use(itemsRoutes))
     .use(itemsRoutes)
+    .get("*", ({ request }) => serveFrontend(request))
     .onAfterHandle(({ request, set }) => {
       const context = getRequestContext(request);
 

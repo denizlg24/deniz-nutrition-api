@@ -6,7 +6,7 @@ The API serves searchable food item summaries, barcode lookup, full nutrition da
 
 ## Features
 
-- Full-text item search across `english`, `portuguese`, `spanish`, and `french`.
+- Full-text item search by name and/or brand across `english`, `portuguese`, `spanish`, and `french`.
 - Barcode and item ID lookup.
 - Full nutrition data storage with quick item summaries derived from nutrition payloads.
 - Redis-backed fixed-window rate limiting.
@@ -201,7 +201,7 @@ Health and readiness:
 
 Items:
 
-- `GET /items/search?q={query}&lang={lang}&minScore={score}&limit={limit}`
+- `GET /items/search?q={query}&brand={brand}&lang={lang}&minScore={score}&limit={limit}`
 - `GET /items/barcode/{barcode}`
 - `GET /items/{id}`
 - `GET /items/{id}/nutrition`
