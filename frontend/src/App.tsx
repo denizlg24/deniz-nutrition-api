@@ -361,6 +361,8 @@ function App() {
   const [minScore, setMinScore] = useState("0.1")
   const [maxCalories, setMaxCalories] = useState("")
   const [minProtein, setMinProtein] = useState("")
+  const [maxFat, setMaxFat] = useState("")
+  const [maxCarbs, setMaxCarbs] = useState("")
   const [page, setPage] = useState(1)
   const [items, setItems] = useState<ItemSearchResult[]>([])
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle")
@@ -372,12 +374,16 @@ function App() {
   const filteredItems = useMemo(() => {
     const calMax = readNum(maxCalories)
     const protMin = readNum(minProtein)
+    const fatMax = readNum(maxFat)
+    const carbMax = readNum(maxCarbs)
     return items.filter((item) => {
       if (calMax !== undefined && (item.caloriesPerServing ?? 0) > calMax) return false
       if (protMin !== undefined && (item.proteinPerServing ?? 0) < protMin) return false
+      if (fatMax !== undefined && (item.fatPerServing ?? 0) > fatMax) return false
+      if (carbMax !== undefined && (item.carbsPerServing ?? 0) > carbMax) return false
       return true
     })
-  }, [items, maxCalories, minProtein])
+  }, [items, maxCalories, minProtein, maxFat, maxCarbs])
 
   const pageCount = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE))
   const currentPage = Math.min(page, pageCount)
@@ -432,7 +438,7 @@ function App() {
   }
 
   const currentInput = mode === "text" ? query : mode === "brand" ? brandValue : barcodeValue
-  const hasFilters = Boolean(maxCalories || minProtein)
+  const hasFilters = Boolean(maxCalories || minProtein || maxFat || maxCarbs)
 
   const modeBtnClass = (active: boolean) =>
     [
@@ -441,11 +447,11 @@ function App() {
     ].join(" ")
 
   return (
-    <div className="min-h-screen max-w-[880px] mx-auto px-7 sm:px-5">
+    <div className="min-h-screen max-w-[880px] mx-auto px-4 sm:px-7">
 
       {/* ── Header ── */}
       <header className="border-b border-ni-border pt-8 pb-6">
-        <div className="flex items-end justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 sm:gap-4">
           <div>
             <h1 className="font-display text-[26px] font-normal tracking-tight leading-none text-ni-text m-0">
               deniz's nutrition<span className="text-ni-accent">.</span>api
@@ -454,7 +460,7 @@ function App() {
               Food &amp; nutrient database
             </p>
           </div>
-          <div className="flex items-center gap-0.5 text-xs shrink-0">
+          <div className="flex items-center gap-0.5 text-xs">
             <button type="button" className={modeBtnClass(mode === "text")} onClick={() => setMode("text")}>
               <Search size={14} /> Text
             </button>
@@ -496,7 +502,7 @@ function App() {
             />
             <div className="flex items-center gap-2 shrink-0">
               {mode === "text" && (
-                <div className="flex gap-px">
+                <div className="hidden sm:flex gap-px">
                   {languages.map((l) => (
                     <button
                       key={l.value}
@@ -544,63 +550,114 @@ function App() {
             </div>
           </div>
 
+          {/* Mobile language selector */}
+          {mode === "text" && (
+            <div className="flex sm:hidden gap-px pt-3">
+              {languages.map((l) => (
+                <button
+                  key={l.value}
+                  type="button"
+                  onClick={() => setLanguage(l.value)}
+                  className={[
+                    "border-none cursor-pointer text-[11px] font-mono px-1.5 py-1 rounded-sm transition-all",
+                    language === l.value
+                      ? "text-ni-text bg-ni-surface font-medium"
+                      : "text-ni-muted bg-transparent hover:text-ni-text",
+                  ].join(" ")}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Filters row */}
           {filtersOpen && mode !== "barcode" && (
-            <div className="flex gap-5 items-end flex-wrap pt-5 animate-fade-in">
-              <div className="flex flex-col gap-1">
-                <label htmlFor="cal-filter" className="text-[9px] tracking-[0.1em] uppercase text-ni-muted">
-                  Max kcal
-                </label>
-                <input
-                  id="cal-filter"
-                  type="number"
-                  min="0"
-                  placeholder="—"
-                  value={maxCalories}
-                  onChange={(e) => { setMaxCalories(e.target.value); setPage(1) }}
-                  className="bg-transparent border-0 border-b border-ni-border pb-1 text-[13px] text-ni-text outline-none w-[110px] transition-colors focus:border-ni-text placeholder:text-ni-border"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="prot-filter" className="text-[9px] tracking-[0.1em] uppercase text-ni-muted">
-                  Min protein (g)
-                </label>
-                <input
-                  id="prot-filter"
-                  type="number"
-                  min="0"
-                  placeholder="—"
-                  value={minProtein}
-                  onChange={(e) => { setMinProtein(e.target.value); setPage(1) }}
-                  className="bg-transparent border-0 border-b border-ni-border pb-1 text-[13px] text-ni-text outline-none w-[110px] transition-colors focus:border-ni-text placeholder:text-ni-border"
-                />
-              </div>
-              {mode === "text" && (
+            <div className="pt-5 animate-fade-in">
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-x-4 gap-y-4 sm:gap-5 items-end">
                 <div className="flex flex-col gap-1">
-                  <label htmlFor="score-filter" className="text-[9px] tracking-[0.1em] uppercase text-ni-muted">
-                    Min score
+                  <label htmlFor="cal-filter" className="text-[9px] tracking-[0.1em] uppercase text-ni-muted">
+                    Max kcal
                   </label>
                   <input
-                    id="score-filter"
+                    id="cal-filter"
                     type="number"
                     min="0"
-                    step="0.05"
-                    placeholder="0.1"
-                    value={minScore}
-                    onChange={(e) => setMinScore(e.target.value)}
-                    className="bg-transparent border-0 border-b border-ni-border pb-1 text-[13px] text-ni-text outline-none w-[110px] transition-colors focus:border-ni-text placeholder:text-ni-border"
+                    placeholder="—"
+                    value={maxCalories}
+                    onChange={(e) => { setMaxCalories(e.target.value); setPage(1) }}
+                    className="bg-transparent border-0 border-b border-ni-border pb-1 text-[13px] text-ni-text outline-none w-full sm:w-[110px] transition-colors focus:border-ni-text placeholder:text-ni-border"
                   />
                 </div>
-              )}
-              {hasFilters && (
-                <button
-                  type="button"
-                  onClick={() => { setMaxCalories(""); setMinProtein(""); setPage(1) }}
-                  className="flex items-center gap-1 bg-transparent border-none cursor-pointer text-[11px] text-ni-muted pb-1 transition-colors hover:text-ni-accent"
-                >
-                  <X size={11} /> Clear
-                </button>
-              )}
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="prot-filter" className="text-[9px] tracking-[0.1em] uppercase text-ni-muted">
+                    Min protein (g)
+                  </label>
+                  <input
+                    id="prot-filter"
+                    type="number"
+                    min="0"
+                    placeholder="—"
+                    value={minProtein}
+                    onChange={(e) => { setMinProtein(e.target.value); setPage(1) }}
+                    className="bg-transparent border-0 border-b border-ni-border pb-1 text-[13px] text-ni-text outline-none w-full sm:w-[110px] transition-colors focus:border-ni-text placeholder:text-ni-border"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="fat-filter" className="text-[9px] tracking-[0.1em] uppercase text-ni-muted">
+                    Max fat (g)
+                  </label>
+                  <input
+                    id="fat-filter"
+                    type="number"
+                    min="0"
+                    placeholder="—"
+                    value={maxFat}
+                    onChange={(e) => { setMaxFat(e.target.value); setPage(1) }}
+                    className="bg-transparent border-0 border-b border-ni-border pb-1 text-[13px] text-ni-text outline-none w-full sm:w-[110px] transition-colors focus:border-ni-text placeholder:text-ni-border"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="carb-filter" className="text-[9px] tracking-[0.1em] uppercase text-ni-muted">
+                    Max carbs (g)
+                  </label>
+                  <input
+                    id="carb-filter"
+                    type="number"
+                    min="0"
+                    placeholder="—"
+                    value={maxCarbs}
+                    onChange={(e) => { setMaxCarbs(e.target.value); setPage(1) }}
+                    className="bg-transparent border-0 border-b border-ni-border pb-1 text-[13px] text-ni-text outline-none w-full sm:w-[110px] transition-colors focus:border-ni-text placeholder:text-ni-border"
+                  />
+                </div>
+                {mode === "text" && (
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="score-filter" className="text-[9px] tracking-[0.1em] uppercase text-ni-muted">
+                      Min score
+                    </label>
+                    <input
+                      id="score-filter"
+                      type="number"
+                      min="0"
+                      step="0.05"
+                      placeholder="0.1"
+                      value={minScore}
+                      onChange={(e) => setMinScore(e.target.value)}
+                      className="bg-transparent border-0 border-b border-ni-border pb-1 text-[13px] text-ni-text outline-none w-full sm:w-[110px] transition-colors focus:border-ni-text placeholder:text-ni-border"
+                    />
+                  </div>
+                )}
+                {hasFilters && (
+                  <button
+                    type="button"
+                    onClick={() => { setMaxCalories(""); setMinProtein(""); setMaxFat(""); setMaxCarbs(""); setPage(1) }}
+                    className="flex items-center gap-1 bg-transparent border-none cursor-pointer text-[11px] text-ni-muted pb-1 transition-colors hover:text-ni-accent self-end"
+                  >
+                    <X size={11} /> Clear
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </form>
