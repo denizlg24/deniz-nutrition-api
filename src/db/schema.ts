@@ -190,7 +190,31 @@ export const nutritionData = pgTable(
   ],
 );
 
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    keyPrefix: text("key_prefix").notNull(),
+    keyHash: text("key_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("api_keys_key_prefix_idx").on(table.keyPrefix),
+    uniqueIndex("api_keys_key_hash_idx").on(table.keyHash),
+    index("api_keys_active_key_hash_idx")
+      .on(table.keyHash)
+      .where(sql`${table.revokedAt} is null`),
+  ],
+);
+
 export type Item = typeof items.$inferSelect;
 export type NewItem = typeof items.$inferInsert;
 export type NutritionData = typeof nutritionData.$inferSelect;
 export type NewNutritionData = typeof nutritionData.$inferInsert;
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type NewApiKey = typeof apiKeys.$inferInsert;

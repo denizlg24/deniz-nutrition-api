@@ -4,12 +4,11 @@ import { basename, dirname } from "node:path";
 import { createInterface } from "node:readline/promises";
 
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq } from "drizzle-orm";
 import { Pool } from "pg";
 
 import { items, nutritionData, type NewItem, type NewNutritionData } from "../src/db/schema";
 
-type SourceName = "foundation" | "branded";
+type SourceName = "foundation" | "branded" | "legacy";
 
 interface ImportArgs {
   source: SourceName | "all";
@@ -71,6 +70,10 @@ const sources = {
   branded: {
     file: "data/FoodData_Central_branded_food_json_2025-12-18.json",
     arrayKey: "BrandedFoods",
+  },
+  legacy: {
+    file: "data/FoodData_Central_sr_legacy_food_json_2018-04.json",
+    arrayKey: "SRLegacyFoods",
   },
 } as const satisfies Record<SourceName, { file: string; arrayKey: string }>;
 
@@ -235,8 +238,8 @@ const parseArgs = (): ImportArgs => {
 
   const source = getValue("--source") ?? "all";
 
-  if (!["foundation", "branded", "all"].includes(source)) {
-    throw new Error("--source must be foundation, branded, or all");
+  if (!["foundation", "branded", "legacy", "all"].includes(source)) {
+    throw new Error("--source must be foundation, branded, legacy, or all");
   }
 
   return {
@@ -588,7 +591,7 @@ const main = async () => {
   const database = drizzle(pool);
   const checkpoint = await readCheckpoint(args.checkpointPath);
   const selectedSources: SourceName[] =
-    args.source === "all" ? ["foundation", "branded"] : [args.source];
+    args.source === "all" ? ["foundation", "branded", "legacy"] : [args.source];
 
   try {
     for (const source of selectedSources) {

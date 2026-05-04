@@ -36,6 +36,13 @@
       "when": 1777500000000,
       "tag": "0004_repair_items_search_vectors",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1777911130988,
+      "tag": "0005_api_keys",
+      "breakpoints": true
     }
   ]
 }

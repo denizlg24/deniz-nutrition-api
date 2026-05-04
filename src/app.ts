@@ -6,6 +6,7 @@ import { db } from "./db/client";
 import { redis } from "./infra/redis";
 import { env } from "./config/env";
 import { RedisRateLimiter, getClientIdentifier } from "./middleware/rate-limit";
+import { hasValidApiKey } from "./modules/api-keys/auth";
 import { itemsRoutes } from "./modules/items/routes";
 import { serveFrontend } from "./frontend/static";
 import { ApiError, isApiError, toError } from "./shared/errors";
@@ -122,6 +123,11 @@ export const app = new Elysia()
     })
     .onBeforeHandle(async ({ request, set }) => {
       if (shouldSkipRateLimit(request)) {
+        return;
+      }
+
+      if (await hasValidApiKey(request)) {
+        set.headers["x-ratelimit-bypass"] = "api-key";
         return;
       }
 

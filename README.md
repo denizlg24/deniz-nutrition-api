@@ -10,6 +10,7 @@ The API serves searchable food item summaries, barcode lookup, full nutrition da
 - Barcode and item ID lookup.
 - Full nutrition data storage with quick item summaries derived from nutrition payloads.
 - Redis-backed fixed-window rate limiting.
+- Database-backed API keys for trusted clients that should bypass rate limits.
 - PostgreSQL schema and migrations managed by Drizzle Kit.
 - Global request IDs, structured JSON logs, centralized error responses, `/health`, and `/ready`.
 - Type-safe OpenAPI documentation generated from Elysia schemas and TypeScript route types.
@@ -111,8 +112,10 @@ bun run db:migrate
 
 ```bash
 bun run dev            # Start API in watch mode
+bun run api-key:generate -- --name local-client # Create an API key
 bun run import:openfoodfacts # Import OpenFoodFacts TSV export
 bun run import:usda    # Import USDA FoodData Central JSON files
+bun run import:usda:legacy # Import USDA SR Legacy JSON data
 bun run start          # Start API
 bun run typecheck      # Type-check the project
 bun run test           # Run unit tests
@@ -120,6 +123,23 @@ bun run test:coverage  # Run tests with coverage
 bun run db:generate    # Generate Drizzle migrations
 bun run db:migrate     # Apply Drizzle migrations
 ```
+
+## API Keys
+
+Create a key with a human-readable name:
+
+```bash
+bun run api-key:generate -- --name "mobile-app"
+```
+
+Only the SHA-256 hash is stored in `api_keys`; the full key is printed once. Send it as either:
+
+```http
+x-api-key: dnut_...
+authorization: Bearer dnut_...
+```
+
+Valid, non-revoked keys bypass Redis rate limits. Invalid or missing keys continue through normal rate limiting.
 
 ## USDA Import
 
@@ -143,10 +163,16 @@ Import the smaller foundation dataset:
 bun run import:usda -- --source foundation
 ```
 
+Import the SR Legacy dataset:
+
+```bash
+bun run import:usda:legacy
+```
+
 Useful options:
 
 ```bash
---source foundation|branded|all
+--source foundation|branded|legacy|all
 --start 50000
 --limit 10000
 --batch-size 500
