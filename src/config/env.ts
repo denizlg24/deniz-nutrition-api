@@ -1,4 +1,7 @@
 const DEFAULT_API_PORT = 3000;
+const DEFAULT_MEILISEARCH_HOST = "https://search.denizlg24.com";
+const DEFAULT_MEILISEARCH_INDEX = "deniz-nutrition-api_foods";
+const DEFAULT_MEILISEARCH_TIMEOUT_MS = 5_000;
 const DEFAULT_RATE_LIMIT_MAX = 120;
 const DEFAULT_RATE_LIMIT_WINDOW_MS = 60_000;
 
@@ -34,6 +37,14 @@ export const env = {
   apiPort: readNumber("API_PORT", DEFAULT_API_PORT),
   databaseUrl: readRequiredString("DATABASE_URL"),
   logLevel: readString("LOG_LEVEL") ?? "info",
+  meilisearchApiKey: readRequiredString("MEILISEARCH_API_KEY"),
+  meilisearchHost: readString("MEILISEARCH_HOST") ?? DEFAULT_MEILISEARCH_HOST,
+  meilisearchIndex:
+    readString("MEILISEARCH_INDEX") ?? DEFAULT_MEILISEARCH_INDEX,
+  meilisearchTimeoutMs: readNumber(
+    "MEILISEARCH_TIMEOUT_MS",
+    DEFAULT_MEILISEARCH_TIMEOUT_MS,
+  ),
   nodeEnv: readString("NODE_ENV") ?? "development",
   ocrServiceUrl: readString("OCR_SERVICE_URL"),
   rateLimitMax: readNumber("RATE_LIMIT_MAX", DEFAULT_RATE_LIMIT_MAX),

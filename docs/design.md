@@ -13,6 +13,7 @@ This system will serve clients with various nutrition data. Users will be able t
 | **Package Manager** | [Bun](https://bun.sh/) |
 | **Framework** | [Elysia.js](https://elysiajs.com/) |
 | **Database** | PostgreSQL |
+| **Search** | Meilisearch |
 
 ---
 
@@ -131,18 +132,17 @@ The full, detailed nutrition breakdown linked to an item.
 
 ---
 
-### Indexes
+### Search
 
-Separate `tsvector` full-text search indexes are built on `name` and `brand` for each supported language. Search vectors are stored columns maintained by write triggers; deletes remove the row and its index entries normally.
+Item search is served by Meilisearch using the `deniz-nutrition-api_foods` index by default. PostgreSQL remains the source of truth for item lookup, nutrition data, and writes.
 
 **Supported languages:** `english`, `portuguese`, `spanish`, `french`
 
 **Query behavior:**
 - The caller provides `q`, `brand`, or both.
-- `q` searches item names, while `brand` searches brands.
-- The caller provides an optional `lang` parameter.
-- If provided, that language's `tsvector` is prioritized (highest weight), then concatenated with the remaining languages.
-- If no language is provided, `english` is used as the highest priority.
+- `q` and `brand` are combined into a Meilisearch query string.
+- The caller may still provide an optional `lang` parameter for API compatibility.
+- `rank` and `score` are derived from Meilisearch's ranking score.
 
 ---
 

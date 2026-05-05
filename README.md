@@ -1,12 +1,12 @@
 # Deniz Nutrition API
 
-Type-safe nutrition data API built with Bun, Elysia, Drizzle ORM, PostgreSQL, and Redis-backed rate limiting.
+Type-safe nutrition data API built with Bun, Elysia, Drizzle ORM, PostgreSQL, Meilisearch, and Redis-backed rate limiting.
 
 The API serves searchable food item summaries, barcode lookup, full nutrition data, and contribution endpoints for manually entered or OCR-extracted nutrition labels.
 
 ## Features
 
-- Full-text item search by name and/or brand across `english`, `portuguese`, `spanish`, and `french`.
+- Fast item search by name and/or brand through Meilisearch.
 - Barcode and item ID lookup.
 - Full nutrition data storage with quick item summaries derived from nutrition payloads.
 - Redis-backed fixed-window rate limiting.
@@ -22,6 +22,7 @@ The API serves searchable food item summaries, barcode lookup, full nutrition da
 - Framework: Elysia
 - Database: PostgreSQL
 - ORM: Drizzle ORM
+- Search: Meilisearch
 - Cache/rate limits: Redis
 - Language: TypeScript
 
@@ -45,11 +46,15 @@ Required variables:
 API_PORT=3000
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/deniz_nutrition
 REDIS_URL=redis://localhost:6379
+MEILISEARCH_API_KEY=
 ```
 
 Optional variables:
 
 ```env
+MEILISEARCH_HOST=https://search.denizlg24.com
+MEILISEARCH_INDEX=deniz-nutrition-api_foods
+MEILISEARCH_TIMEOUT_MS=5000
 NODE_ENV=development
 LOG_LEVEL=info
 RATE_LIMIT_MAX=120

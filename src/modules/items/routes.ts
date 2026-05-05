@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 
 import { db } from "../../db/client";
 import { env } from "../../config/env";
+import { meilisearch } from "../../infra/meilisearch";
 import { getRequestContext } from "../../shared/request-context";
 import { ok } from "../../shared/http";
 import { ItemsRepository } from "./repository";
@@ -19,7 +20,7 @@ import {
 const getRequestId = (request: Request) =>
   getRequestContext(request)?.requestId ?? "unknown";
 
-const repository = new ItemsRepository(db);
+const repository = new ItemsRepository(db, meilisearch);
 const service = new ItemsService(repository);
 const ocrService = new OcrService(env.ocrServiceUrl);
 

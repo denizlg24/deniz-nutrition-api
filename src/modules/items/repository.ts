@@ -1,6 +1,8 @@
-import { and, asc, eq, sql, type SQL } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import type { Database } from "../../db/client";
+import type { MeilisearchSearchClient } from "../../infra/meilisearch";
+import { ApiError } from "../../shared/errors";
 import {
   items,
   nutritionData,
@@ -9,7 +11,6 @@ import {
   type NewNutritionData,
   type NutritionData,
   type SupportedLanguage,
-  supportedLanguages,
 } from "../../db/schema";
 
 export type ItemSummary = Pick<
@@ -60,108 +61,185 @@ export interface ItemSearchInput {
   brand?: string;
 }
 
-const nameSearchVectorColumns: Record<SupportedLanguage, SQL> = {
-  english: sql`${items.searchVectorEnglish}`,
-  portuguese: sql`${items.searchVectorPortuguese}`,
-  spanish: sql`${items.searchVectorSpanish}`,
-  french: sql`${items.searchVectorFrench}`,
-};
+interface MeilisearchItemHit {
+  [key: string]: unknown;
+  _rankingScore?: number;
+}
 
-const brandSearchVectorColumns: Record<SupportedLanguage, SQL> = {
-  english: sql`${items.brandSearchVectorEnglish}`,
-  portuguese: sql`${items.brandSearchVectorPortuguese}`,
-  spanish: sql`${items.brandSearchVectorSpanish}`,
-  french: sql`${items.brandSearchVectorFrench}`,
-};
+const searchableAttributes = [
+  "id",
+  "barcode",
+  "name",
+  "brand",
+  "servingLabel",
+  "serving_label",
+  "caloriesPerServing",
+  "calories_per_serving",
+  "proteinPerServing",
+  "protein_per_serving",
+  "carbsPerServing",
+  "carbs_per_serving",
+  "fatPerServing",
+  "fat_per_serving",
+  "createdAt",
+  "created_at",
+  "updatedAt",
+  "updated_at",
+];
 
-const buildSearchVector = (
-  columns: Record<SupportedLanguage, SQL>,
-  priorityLanguage: SupportedLanguage,
+const readField = (
+  hit: MeilisearchItemHit,
+  camelName: string,
+  snakeName = camelName,
+) => hit[camelName] ?? hit[snakeName];
+
+const readRequiredString = (
+  hit: MeilisearchItemHit,
+  camelName: string,
+  snakeName?: string,
 ) => {
-  const secondaryLanguages = supportedLanguages.filter(
-    (language) => language !== priorityLanguage,
-  );
+  const value = readField(hit, camelName, snakeName);
 
-  return sql`
-    setweight(${columns[priorityLanguage]}, 'A') ||
-    setweight(${columns[secondaryLanguages[0]]}, 'B') ||
-    setweight(${columns[secondaryLanguages[1]]}, 'B') ||
-    setweight(${columns[secondaryLanguages[2]]}, 'B')
-  `;
+  if (typeof value !== "string") {
+    throw new ApiError(
+      502,
+      "SEARCH_PROVIDER_INVALID_RESPONSE",
+      "Search provider returned an invalid item payload",
+      { field: camelName },
+    );
+  }
+
+  return value;
+};
+
+const readNullableString = (
+  hit: MeilisearchItemHit,
+  camelName: string,
+  snakeName?: string,
+) => {
+  const value = readField(hit, camelName, snakeName);
+
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    throw new ApiError(
+      502,
+      "SEARCH_PROVIDER_INVALID_RESPONSE",
+      "Search provider returned an invalid item payload",
+      { field: camelName },
+    );
+  }
+
+  return value;
+};
+
+const readRequiredNumber = (
+  hit: MeilisearchItemHit,
+  camelName: string,
+  snakeName?: string,
+) => {
+  const value = readField(hit, camelName, snakeName);
+  const numberValue = typeof value === "number" ? value : Number(value);
+
+  if (!Number.isFinite(numberValue)) {
+    throw new ApiError(
+      502,
+      "SEARCH_PROVIDER_INVALID_RESPONSE",
+      "Search provider returned an invalid item payload",
+      { field: camelName },
+    );
+  }
+
+  return numberValue;
+};
+
+const readRequiredDate = (
+  hit: MeilisearchItemHit,
+  camelName: string,
+  snakeName?: string,
+) => {
+  const value = readField(hit, camelName, snakeName);
+  const date =
+    typeof value === "number"
+      ? new Date(value < 10_000_000_000 ? value * 1_000 : value)
+      : value instanceof Date
+        ? value
+        : new Date(String(value));
+
+  if (Number.isNaN(date.getTime())) {
+    throw new ApiError(
+      502,
+      "SEARCH_PROVIDER_INVALID_RESPONSE",
+      "Search provider returned an invalid item payload",
+      { field: camelName },
+    );
+  }
+
+  return date;
+};
+
+const toItemSearchResult = (hit: MeilisearchItemHit): ItemSearchResult => {
+  const score =
+    typeof hit._rankingScore === "number" && Number.isFinite(hit._rankingScore)
+      ? hit._rankingScore
+      : 1;
+
+  return {
+    id: readRequiredString(hit, "id"),
+    barcode: readRequiredString(hit, "barcode"),
+    name: readRequiredString(hit, "name"),
+    brand: readNullableString(hit, "brand"),
+    servingLabel: readRequiredString(hit, "servingLabel", "serving_label"),
+    caloriesPerServing: readRequiredNumber(
+      hit,
+      "caloriesPerServing",
+      "calories_per_serving",
+    ),
+    proteinPerServing: readRequiredNumber(
+      hit,
+      "proteinPerServing",
+      "protein_per_serving",
+    ),
+    carbsPerServing: readRequiredNumber(
+      hit,
+      "carbsPerServing",
+      "carbs_per_serving",
+    ),
+    fatPerServing: readRequiredNumber(hit, "fatPerServing", "fat_per_serving"),
+    createdAt: readRequiredDate(hit, "createdAt", "created_at"),
+    updatedAt: readRequiredDate(hit, "updatedAt", "updated_at"),
+    rank: score,
+    score,
+  };
 };
 
 export class ItemsRepository {
-  constructor(private readonly database: Database) {}
+  constructor(
+    private readonly database: Database,
+    private readonly searchClient: MeilisearchSearchClient,
+  ) {}
 
   async search(
     input: ItemSearchInput,
-    language: SupportedLanguage,
+    _language: SupportedLanguage,
     limit: number | undefined,
     minScore: number,
   ): Promise<ItemSearchResult[]> {
     const query = input.query?.trim();
     const brand = input.brand?.trim();
-    const nameSearchVector = buildSearchVector(nameSearchVectorColumns, language);
-    const brandSearchVector = buildSearchVector(
-      brandSearchVectorColumns,
-      language,
-    );
-    const nameTsQuery = query
-      ? sql`websearch_to_tsquery(${language}::regconfig, ${query})`
-      : undefined;
-    const brandTsQuery = brand
-      ? sql`websearch_to_tsquery(${language}::regconfig, ${brand})`
-      : undefined;
-    const nameRank = nameTsQuery
-      ? sql<number>`ts_rank_cd(${nameSearchVector}, ${nameTsQuery})`
-      : sql<number>`0`;
-    const brandRank = brandTsQuery
-      ? sql<number>`ts_rank_cd(${brandSearchVector}, ${brandTsQuery})`
-      : sql<number>`0`;
-    const rank = sql<number>`(${nameRank} + ${brandRank})`;
-    const normalizedQuery = query?.toLowerCase();
-    const normalizedBrand = brand?.toLowerCase();
-    const nameScore = normalizedQuery
-      ? sql<number>`case
-          when lower(${items.name}) = ${normalizedQuery} then 3
-          when lower(${items.name}) like '%' || ${normalizedQuery} || '%' then 1.5
-          else 0
-        end`
-      : sql<number>`0`;
-    const brandScore = normalizedBrand
-      ? sql<number>`case
-          when lower(${items.brand}) = ${normalizedBrand} then 2
-          when lower(${items.brand}) like '%' || ${normalizedBrand} || '%' then 1
-          else 0
-        end`
-      : sql<number>`0`;
-    const score = sql<number>`(
-      ${rank}
-      + ${nameScore}
-      + ${brandScore}
-    )`;
-    const conditions = [
-      ...(nameTsQuery ? [sql`${nameSearchVector} @@ ${nameTsQuery}`] : []),
-      ...(brandTsQuery ? [sql`${brandSearchVector} @@ ${brandTsQuery}`] : []),
-      sql`${score} >= ${minScore}`,
-    ];
+    const searchTerms = [query, brand].filter(Boolean).join(" ");
+    const response = await this.searchClient.search<MeilisearchItemHit>({
+      q: searchTerms,
+      limit,
+      attributesToRetrieve: searchableAttributes,
+      showRankingScore: true,
+    });
 
-    const search = this.database
-      .select({
-        ...itemSummarySelect,
-        rank,
-        score,
-      })
-      .from(items)
-      .where(and(...conditions))
-      .orderBy(sql`${score} desc`, sql`${rank} desc`, asc(items.name))
-      .$dynamic();
-
-    if (limit !== undefined) {
-      return search.limit(limit);
-    }
-
-    return search;
+    return response.hits
+      .map(toItemSearchResult)
+      .filter((item) => item.score >= minScore);
   }
 
   async findById(id: string): Promise<ItemSummary | undefined> {
