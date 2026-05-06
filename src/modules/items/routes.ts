@@ -4,7 +4,8 @@ import { db } from "../../db/client";
 import { env } from "../../config/env";
 import { meilisearch } from "../../infra/meilisearch";
 import { getRequestContext } from "../../shared/request-context";
-import { ok } from "../../shared/http";
+import { fail, ok } from "../../shared/http";
+import { isApiError } from "../../shared/errors";
 import { ItemsRepository } from "./repository";
 import { ItemsService, OcrService } from "./service";
 import {
@@ -19,6 +20,25 @@ import {
 
 const getRequestId = (request: Request) =>
   getRequestContext(request)?.requestId ?? "unknown";
+
+const toApiErrorResponse = (error: unknown, request: Request, set: {
+  status?: number | string;
+}) => {
+  if (!isApiError(error)) {
+    throw error;
+  }
+
+  set.status = error.statusCode;
+
+  return fail(
+    {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+    },
+    getRequestId(request),
+  );
+};
 
 const repository = new ItemsRepository(db, meilisearch);
 const service = new ItemsService(repository);
@@ -52,8 +72,16 @@ export const itemsRoutes = new Elysia({ prefix: "/items" })
   )
   .get(
     "/barcode/:barcode",
-    async ({ params, request }) =>
-      ok(await service.getByBarcode(params.barcode), getRequestId(request)),
+    async ({ params, request, set }) => {
+      try {
+        return ok(
+          await service.getByBarcode(params.barcode),
+          getRequestId(request),
+        );
+      } catch (error) {
+        return toApiErrorResponse(error, request, set);
+      }
+    },
     {
       params: barcodeParamsSchema,
       detail: {
